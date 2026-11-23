@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SolarTrack — MESCOM HT Energy Analytics & Billing</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/vendor/chart.umd.js"></script>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="logo-circle">⚡</div>
+      <div>
+        <h1>SolarTrack</h1>
+        <p class="subtitle">St Joseph Engineering College — Rooftop Solar & MESCOM Energy Monitor</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="connection-badge" id="connBadge">Connection: KULHT15</div>
+      <div id="authStatus" class="auth-box">
+        <span id="userBadge" class="user-pill">Not logged in</span>
+        <button id="authBtn" class="btn btn-sm btn-outline" onclick="toggleAuthModal()">Login</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="app-nav">
+    <button class="nav-tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="nav-tab" onclick="switchTab('bills')">📑 Bills & Review</button>
+    <button class="nav-tab" onclick="switchTab('rates')">💰 Savings Rates</button>
+    <button class="nav-tab" onclick="switchTab('reports')">📄 Reports & PDF</button>
+    <button class="nav-tab admin-only" onclick="switchTab('backfill')">📥 Historical Backfill</button>
+    <button class="nav-tab admin-only" onclick="switchTab('users')">👥 User Management</button>
+    <button class="nav-tab admin-only" onclick="switchTab('backup')">💾 System & Backups</button>
+  </nav>
+
+  <!-- Notification Banner -->
+  <div id="systemBanner" class="alert-banner" style="display: none;"></div>
+
+  <main class="app-main">
+
+    <!-- TAB 1: DASHBOARD -->
+    <section id="tab-dashboard" class="tab-pane active">
+      <div class="pane-header">
+        <h2>Energy & Financial Overview</h2>
+        <div class="pane-actions">
+          <label>Filter Year:
+            <select id="dashYearSelect" onchange="loadDashboard()">
+              <option value="all">All Years (2021 - 2026)</option>
+              <option value="2026">2026</option>
+              <option value="2025" selected>2025</option>
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
+              <option value="2022">2022</option>
+              <option value="2021">2021</option>
+            </select>
+          </label>
+          <button class="btn btn-outline" onclick="loadDashboard()">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- KPI Metric Cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card green">
+          <div class="kpi-title">Solar Generated (a)</div>
+          <div class="kpi-val" id="kpiSolar">— <span class="unit">kWh</span></div>
+          <div class="kpi-sub">Clean rooftop generation</div>
+        </div>
+        <div class="kpi-card blue">
+          <div class="kpi-title">MESCOM Imported (b)</div>
+          <div class="kpi-val" id="kpiImport">— <span class="unit">kWh</span></div>
+          <div class="kpi-sub">Grid energy imported</div>
+        </div>
+        <div class="kpi-card orange">
+          <div class="kpi-title">MESCOM Exported (c)</div>
+          <div class="kpi-val" id="kpiExport">— <span class="unit">kWh</span></div>
+          <div class="kpi-sub">Surplus fed to grid</div>
+        </div>
+        <div class="kpi-card purple">
+          <div class="kpi-title">Net Grid Energy (d = b - c)</div>
+          <div class="kpi-val" id="kpiNet">— <span class="unit">kWh</span></div>
+          <div class="kpi-sub">Net utility import</div>
+        </div>
+        <div class="kpi-card navy">
+          <div class="kpi-title">Total Consumption (a + d)</div>
+          <div class="kpi-val" id="kpiConsumed">— <span class="unit">kWh</span></div>
+          <div class="kpi-sub">Total campus electricity use</div>
+        </div>
+        <div class="kpi-card gold">
+          <div class="kpi-title">Total Cost Savings</div>
+          <div class="kpi-val" id="kpiSavings">—</div>
+          <div class="kpi-sub">Solar generated × Staff monthly rate</div>
+        </div>
+      </div>
+
+      <!-- Warnings Area -->
+      <div id="dashWarnings" class="dash-warnings" style="display: none;"></div>
+
+      <!-- Charts Grid -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3>Solar Generation vs Total Consumption</h3>
+            <span class="chart-badge">kWh / Month</span>
+          </div>
+          <div class="chart-body"><canvas id="chartSolarVsConsumed"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3>Grid Import vs Surplus Export Trend</h3>
+            <span class="chart-badge">kWh / Month</span>
+          </div>
+          <div class="chart-body"><canvas id="chartImportExport"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3>Monthly Financial Savings (₹)</h3>
+            <span class="chart-badge">Calculated (a × Rate)</span>
+          </div>
+          <div class="chart-body"><canvas id="chartSavings"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3>Year-over-Year Generation Comparison</h3>
+            <span class="chart-badge">Seasonal Pattern</span>
+          </div>
+          <div class="chart-body"><canvas id="chartYoY"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: BILLS & REVIEW -->
+    <section id="tab-bills" class="tab-pane">
+      <div class="pane-header">
+        <h2>Bills Repository & Verification</h2>
+        <div class="pane-actions">
+          <button class="btn btn-primary admin-only" onclick="openUploadModal()">📤 Upload New Bill</button>
+        </div>
+      </div>
+
+      <!-- Filter Controls -->
+      <div class="filter-bar">
+        <div class="filter-group">
+          <label>Status Filter:
+            <select id="billStatusFilter" onchange="loadBills()">
+              <option value="all">All Statuses</option>
+              <option value="extracted">Extracted (Ready for Review)</option>
+              <option value="needs_review">Needs Review (Has Warnings/Flags)</option>
+              <option value="verified">Verified (Approved)</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+        </div>
+        <div class="filter-group">
+          <label>Year:
+            <select id="billYearFilter" onchange="loadBills()">
+              <option value="all">All Years</option>
+              <option value="2026">2026</option>
+              <option value="2025">2025</option>
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
+              <option value="2022">2022</option>
+              <option value="2021">2021</option>
+            </select>
+          </label>
+        </div>
+        <div class="filter-group">
+          <input type="text" id="billSearch" placeholder="Search bill month or RR..." oninput="filterBillsTable()">
+        </div>
+      </div>
+
+      <!-- Bills Table -->
+      <div class="table-container">
+        <table class="data-table" id="billsTable">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Period</th>
+              <th>Solar (a)</th>
+              <th>Import (b)</th>
+              <th>Export (c)</th>
+              <th>Net (d)</th>
+              <th>Total Consumed</th>
+              <th>Rate (₹)</th>
+              <th>Savings (₹)</th>
+              <th>Status</th>
+              <th>Validation</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="billsTableBody">
+            <tr><td colspan="12" class="text-center">Loading bills...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 3: SAVINGS RATES -->
+    <section id="tab-rates" class="tab-pane">
+      <div class="pane-header">
+        <h2>Monthly Savings Rates</h2>
+        <div class="pane-actions">
+          <button class="btn btn-primary admin-only" onclick="openRateModal()">➕ Set Rate for Month</button>
+        </div>
+      </div>
+      <p class="section-desc">
+        Under approved faculty rules, the savings rate (₹ per kWh) must be entered by college staff for EACH month.
+        It is never read from the bill and never defaulted. Savings = Solar Generation × Rate.
+      </p>
+
+      <div class="rates-layout">
+        <div class="rates-table-col">
+          <div class="table-container">
+            <table class="data-table" id="ratesTable">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Rate (₹ / kWh)</th>
+                  <th>Entered By</th>
+                  <th>Status</th>
+                  <th class="admin-only">Action</th>
+                </tr>
+              </thead>
+              <tbody id="ratesTableBody">
+                <tr><td colspan="5" class="text-center">Loading rates...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rates-ref-col">
+          <div class="card ref-card">
+            <h3>Approved Tariff Benchmark Reference</h3>
+            <p class="ref-sub">Historical benchmark tariffs from College Energy Office:</p>
+            <table class="ref-table">
+              <tr><td>March 2021 – May 2021:</td><td><strong>₹ 8.05 / unit</strong></td></tr>
+              <tr><td>June 2021 – March 2022:</td><td><strong>₹ 8.15 / unit</strong></td></tr>
+              <tr><td>April 2022 – April 2023:</td><td><strong>₹ 8.20 / unit</strong></td></tr>
+              <tr><td>May 2023 – April 2024:</td><td><strong>₹ 8.50 / unit</strong></td></tr>
+              <tr><td>May 2024 – March 2025:</td><td><strong>₹ 8.10 / unit</strong> (Mar-25 Faculty Note: <strong>₹ 7.00</strong>)</td></tr>
+              <tr><td>April 2025 – June 2026:</td><td><strong>₹ 7.20 / unit</strong></td></tr>
+              <tr><td>July 2026 – September 2026:</td><td><strong>₹ 7.00 / unit</strong></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: REPORTS & PDF -->
+    <section id="tab-reports" class="tab-pane">
+      <div class="pane-header">
+        <h2>College Energy Reports & PDF Generation</h2>
+        <div class="pane-actions">
+          <button class="btn btn-success" onclick="downloadReportPdf()">📥 Download Official PDF Report</button>
+        </div>
+      </div>
+      <p class="section-desc">
+        Generates official energy reports matching the faculty's approved multi-month format. Includes lines (a), (b), (c), (d),
+        total consumption, monthly savings, cumulative metrics from inception (18 March 2021), and an AI executive summary.
+      </p>
+
+      <!-- Report Filter / Period Config -->
+      <div class="report-controls-card">
+        <div class="control-row">
+          <div class="control-group">
+            <label>Report Frequency / Template:</label>
+            <select id="repFrequency" onchange="adjustReportDates()">
+              <option value="custom">Custom Date Range</option>
+              <option value="monthly">Monthly Report (Single Month)</option>
+              <option value="six_monthly">Six-Monthly Report</option>
+              <option value="yearly">Yearly Report (12 Months)</option>
+              <option value="inception" selected>Inception to Date (All 2021 - 2026 Data)</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label>Start Month:</label>
+            <input type="month" id="repStart" value="2021-03">
+          </div>
+          <div class="control-group">
+            <label>End Month:</label>
+            <input type="month" id="repEnd" value="2026-09">
+          </div>
+          <div class="control-group">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary" onclick="generateReportPreview()">🔍 Preview Report</button>
+          </div>
+        </div>
+        <div class="control-row secondary">
+          <label class="checkbox-label">
+            <input type="checkbox" id="repIncludeAI" checked onchange="toggleAiControls()">
+            Include AI Executive Summary (with verified numerical guardrails)
+          </label>
+          <button id="btnRegenAI" class="btn btn-sm btn-outline" onclick="generateAiSummaryOnly()">⚡ Regenerate AI Summary</button>
+        </div>
+        <div id="aiSummaryBox" class="ai-summary-box">
+          <label><strong>AI-Written Executive Summary (editable before PDF export):</strong></label>
+          <textarea id="aiSummaryText" rows="4" placeholder="Generating AI summary from verified data..."></textarea>
+          <div id="aiGuardrailStatus" class="guardrail-status"></div>
+        </div>
+      </div>
+
+      <!-- Report In-Browser Preview -->
+      <div class="report-preview-frame" id="reportPreviewContainer">
+        <div class="report-paper" id="reportPaper">
+          <div class="text-center text-muted" style="padding: 40px;">Click "Preview Report" above to render report data.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: HISTORICAL BACKFILL (ADMIN ONLY) -->
+    <section id="tab-backfill" class="tab-pane admin-only">
+      <div class="pane-header">
+        <h2>Historical Data Backfill</h2>
+        <div class="pane-actions">
+          <button class="btn btn-outline" onclick="downloadBackfillTemplate()">📄 Download CSV Template</button>
+        </div>
+      </div>
+      <p class="section-desc">
+        Import past months of college energy records from CSV or Excel (.xlsx). Every record runs through the exact same
+        validation checks as live bills before entering the system.
+      </p>
+
+      <div class="backfill-grid">
+        <div class="card">
+          <h3>One-Click Import Faculty Dataset (2021 – 2026)</h3>
+          <p>
+            The project includes the complete 67-month verified historical dataset extracted from the college faculty's approved report
+            (March 2021 to September 2026). Click below to backfill all 67 months instantly.
+          </p>
+          <button class="btn btn-success btn-lg" onclick="importBundledHistoricalData()">⚡ Import All 67 Months Now</button>
+          <div id="bundledImportResult" class="import-result-box" style="display: none;"></div>
+        </div>
+
+        <div class="card">
+          <h3>Custom File Upload (CSV or Excel)</h3>
+          <div class="file-drop-zone" id="backfillDropZone">
+            <p>Drag and drop a <strong>.csv</strong> or <strong>.xlsx</strong> file here, or click to browse</p>
+            <input type="file" id="backfillFileInput" accept=".csv, .xlsx, .xls" style="display: none;" onchange="handleBackfillFile(this.files[0])">
+            <button class="btn btn-outline" onclick="document.getElementById('backfillFileInput').click()">Select File</button>
+          </div>
+          <div id="customBackfillStatus" class="import-result-box" style="display: none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: USER MANAGEMENT (ADMIN ONLY) -->
+    <section id="tab-users" class="tab-pane admin-only">
+      <div class="pane-header">
+        <h2>User Management & Role-Based Access</h2>
+        <div class="pane-actions">
+          <button class="btn btn-primary" onclick="openCreateUserModal()">➕ Add New User</button>
+        </div>
+      </div>
+      <p class="section-desc">
+        Roles: <strong>admin</strong> (upload, edit, verify, enter rates, manage users) and <strong>viewer</strong> (dashboard and reports).
+      </p>
+
+      <div class="table-container">
+        <table class="data-table" id="usersTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Full Name</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr><td colspan="7" class="text-center">Loading users...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 7: SYSTEM & BACKUPS (ADMIN ONLY) -->
+    <section id="tab-backup" class="tab-pane admin-only">
+      <div class="pane-header">
+        <h2>System Maintenance, Backups & Audit Log</h2>
+        <div class="pane-actions">
+          <button class="btn btn-success" onclick="createBackup()">💾 Create Full System Backup Now</button>
+        </div>
+      </div>
+
+      <div class="backfill-grid">
+        <div class="card">
+          <h3>Available Backups</h3>
+          <p>Archives contain full SQLite/MySQL database and all uploaded original bill documents.</p>
+          <ul id="backupsList" class="backups-list">
+            <li>Loading backups...</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Recent Audit Activity</h3>
+          <p>Audits every upload, edit, verification, rejection, and rate modification with user timestamp.</p>
+          <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+            <table class="data-table text-sm" id="auditTable">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Bill ID</th>
+                  <th>Field / Value</th>
+                </tr>
+              </thead>
+              <tbody id="auditTableBody">
+                <tr><td colspan="5" class="text-center">Loading audit log...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- 1. Review & Verification Split-Screen Modal -->
+  <div id="reviewModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box modal-xl">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 id="revModalTitle">Bill Review & Verification</h3>
+          <span id="revStatusBadge" class="badge">Status</span>
+        </div>
+        <button class="btn-close" onclick="closeReviewModal()">✕</button>
+      </div>
+
+      <div class="split-view">
+        <!-- Left: Original Bill Document Preview -->
+        <div class="split-left">
+          <div class="doc-preview-bar">
+            <span>📄 Original Uploaded Bill Document</span>
+            <a id="revOriginalDownload" href="#" target="_blank" class="btn btn-xs btn-outline">Open in New Tab</a>
+          </div>
+          <div class="doc-viewer-container" id="docViewerContainer">
+            <iframe id="docViewerIframe" src="about:blank"></iframe>
+          </div>
+        </div>
+
+        <!-- Right: Extracted Fields & Validation -->
+        <div class="split-right">
+          <!-- Validation Flags Alert Box -->
+          <div id="revFlagsBox" class="flags-box">
+            <h4>Validation Flags & Checks</h4>
+            <div id="revFlagsList"></div>
+          </div>
+
+          <!-- Live Energy Arithmetic Box -->
+          <div class="calc-preview-card">
+            <h4>Live Energy Calculation (Formula Preview)</h4>
+            <div class="calc-row">
+              <div>(a) Solar: <strong id="calcSolar">—</strong></div>
+              <div>(b) Import: <strong id="calcImport">—</strong></div>
+              <div>(c) Export: <strong id="calcExport">—</strong></div>
+              <div>(d) Net: <strong id="calcNet">—</strong></div>
+              <div>Total: <strong id="calcTotal">—</strong></div>
+              <div>Savings: <strong id="calcSavings">—</strong></div>
+            </div>
+          </div>
+
+          <!-- Editable Fields Form -->
+          <form id="reviewForm" onsubmit="saveBillEdits(event)">
+            <input type="hidden" id="editBillId">
+
+            <div class="form-section-title">1. Billing Dates</div>
+            <div class="form-row cols-3">
+              <div class="form-field">
+                <label>Bill Month</label>
+                <input type="date" id="editBillMonth" required onchange="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Period Start</label>
+                <input type="date" id="editPeriodStart" required onchange="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Period End</label>
+                <input type="date" id="editPeriodEnd" required onchange="recalculateLiveMath()">
+              </div>
+            </div>
+
+            <div class="form-section-title">2. Constants (Multipliers)</div>
+            <div class="form-row cols-2">
+              <div class="form-field">
+                <label>Solar Constant (e.g. 100)</label>
+                <input type="number" step="any" id="editSolarConst" required oninput="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Meter Constant (e.g. 2000)</label>
+                <input type="number" step="any" id="editMeterConst" required oninput="recalculateLiveMath()">
+              </div>
+            </div>
+
+            <div class="form-section-title">3. Solar Generation Meter</div>
+            <div class="form-row cols-3">
+              <div class="form-field">
+                <label>Previous Reading</label>
+                <input type="number" step="any" id="editSolarPrev" required oninput="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Present Reading</label>
+                <input type="number" step="any" id="editSolarPres" required oninput="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Units Printed</label>
+                <input type="number" step="any" id="editSolarUnits" required oninput="recalculateLiveMath()">
+              </div>
+            </div>
+
+            <div class="form-section-title">4. MESCOM Grid Import Energy (Total Consumption Row)</div>
+            <div class="form-row cols-3">
+              <div class="form-field">
+                <label>Previous Reading</label>
+                <input type="number" step="any" id="editImportPrev" required oninput="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Present Reading</label>
+                <input type="number" step="any" id="editImportPres" required oninput="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Units Printed</label>
+                <input type="number" step="any" id="editImportUnits" required oninput="recalculateLiveMath()">
+              </div>
+            </div>
+
+            <div class="form-section-title">5. MESCOM Grid Solar Export Energy (Units Row)</div>
+            <div class="form-row cols-3">
+              <div class="form-field">
+                <label>Previous Reading</label>
+                <input type="number" step="any" id="editExportPrev" required oninput="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Present Reading</label>
+                <input type="number" step="any" id="editExportPres" required oninput="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Units Printed</label>
+                <input type="number" step="any" id="editExportUnits" required oninput="recalculateLiveMath()">
+              </div>
+            </div>
+
+            <div class="form-section-title">6. Net Energy & Sub-Meter</div>
+            <div class="form-row cols-2">
+              <div class="form-field">
+                <label>Printed Net Import Units</label>
+                <input type="number" step="any" id="editNetImport" oninput="recalculateLiveMath()">
+              </div>
+              <div class="form-field">
+                <label>Sub-Meter Units (Not used in energy formulas)</label>
+                <input type="number" step="any" id="editSubMeter">
+              </div>
+            </div>
+
+            <div class="modal-actions admin-only">
+              <button type="submit" class="btn btn-outline">💾 Save Edits</button>
+              <button type="button" id="btnVerifyBill" class="btn btn-success" onclick="verifyCurrentBill()">✓ Verify & Approve Bill</button>
+              <button type="button" class="btn btn-danger" onclick="rejectCurrentBill()">✕ Reject Bill</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Upload Modal -->
+  <div id="uploadModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box modal-md">
+      <div class="modal-header">
+        <h3>Upload Electricity Bill (PDF / Image)</h3>
+        <button class="btn-close" onclick="closeUploadModal()">✕</button>
+      </div>
+      <form id="uploadForm" onsubmit="submitBillUpload(event)">
+        <div class="form-field">
+          <label>Select Bill File (PDF, PNG, JPG - max 15MB):</label>
+          <input type="file" id="billFileInput" accept=".pdf, .png, .jpg, .jpeg" required onchange="onBillFileSelected(this.files[0])">
+        </div>
+        <div id="pdfPageOption" class="form-field" style="display: none;">
+          <label>Multi-Page PDF Detected: Select Page</label>
+          <select id="billPageSelect"></select>
+          <small class="text-muted">Choose the page containing the MESCOM HT bill.</small>
+        </div>
+        <div class="form-field">
+          <label class="checkbox-label">
+            <input type="checkbox" id="uploadReplaceCheck">
+            Replace existing verified version (if this month was previously verified)
+          </label>
+        </div>
+        <div id="uploadProgress" class="upload-progress-box" style="display: none;">
+          <div class="spinner"></div>
+          <p id="uploadProgressText">Gemini is extracting bill data with schema validation...</p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeUploadModal()">Cancel</button>
+          <button type="submit" id="btnUploadSubmit" class="btn btn-primary">Start Extraction</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Rate Entry Modal -->
+  <div id="rateModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3>Set Monthly Savings Rate</h3>
+        <button class="btn-close" onclick="closeRateModal()">✕</button>
+      </div>
+      <form id="rateForm" onsubmit="submitRate(event)">
+        <div class="form-field">
+          <label>Bill Month:</label>
+          <input type="month" id="rateMonthInput" required>
+        </div>
+        <div class="form-field">
+          <label>Rate (₹ per kWh):</label>
+          <input type="number" step="0.01" min="0" id="rateValueInput" placeholder="e.g. 7.00" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeRateModal()">Cancel</button>
+          <button type="submit" class="btn btn-success">Save Rate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. Create User Modal -->
+  <div id="userModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3>Create New User</h3>
+        <button class="btn-close" onclick="closeUserModal()">✕</button>
+      </div>
+      <form id="createUserForm" onsubmit="submitCreateUser(event)">
+        <div class="form-field">
+          <label>Username:</label>
+          <input type="text" id="newUsername" required>
+        </div>
+        <div class="form-field">
+          <label>Full Name:</label>
+          <input type="text" id="newFullName" placeholder="e.g. Dr. John Doe">
+        </div>
+        <div class="form-field">
+          <label>Password:</label>
+          <input type="password" id="newPassword" required>
+        </div>
+        <div class="form-field">
+          <label>Role:</label>
+          <select id="newRole">
+            <option value="viewer">Viewer (Dashboard & Reports)</option>
+            <option value="admin">Administrator (Full Access)</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeUserModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. Auth / Login Modal -->
+  <div id="authModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3>Staff Authentication</h3>
+        <button class="btn-close" onclick="closeAuthModal()">✕</button>
+      </div>
+      <form id="loginForm" onsubmit="submitLogin(event)">
+        <div class="form-field">
+          <label>Username:</label>
+          <input type="text" id="loginUsername" required autofocus>
+        </div>
+        <div class="form-field">
+          <label>Password:</label>
+          <input type="password" id="loginPassword" required>
+        </div>
+        <div class="quick-credentials">
+          <small class="text-muted">Default system accounts:</small>
+          <div class="quick-creds-btns">
+            <button type="button" class="btn btn-xs btn-outline" onclick="fillCreds('admin', 'admin123')">Admin (admin/admin123)</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="fillCreds('viewer', 'viewer123')">Viewer (viewer/viewer123)</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeAuthModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Sign In</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

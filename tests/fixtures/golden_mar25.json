@@ -1,0 +1,54 @@
+{
+  "consumer": {
+    "name": "THE PRESIDENT ST JOSEPHS ENG COLLEGE VOMANJOOR MANGALORE",
+    "rr_number": "KULHT15",
+    "account_id": "XXXXXXXXXX",
+    "tariff": "HT2C2",
+    "voltage_class": "11kv",
+    "contract_demand_kva": 350.0,
+    "meter_constant": 2000.0,
+    "solar_constant": 100.0
+  },
+  "billing": {
+    "bill_month_label": "Mar-25",
+    "bill_date": "2025-04-01",
+    "due_date": "2025-04-15",
+    "disconnection_date": "2025-04-30",
+    "present_reading_date": "2025-04-01",
+    "previous_reading_date": "2025-03-01",
+    "book_no": "B-3",
+    "page_no": "12"
+  },
+  "meters": {
+    "grid_import": {
+      "present_reading": 1562.834,
+      "previous_reading": 1524.236,
+      "units_printed": 77196.0
+    },
+    "solar_export": {
+      "present_reading": 76.453,
+      "previous_reading": 75.148,
+      "units_printed": 2610.0
+    },
+    "solar_generation": {
+      "present_reading": 14478.19,
+      "previous_reading": 14107.17,
+      "units_printed": 37102.0
+    },
+    "net_energy_import_printed": 74586.0,
+    "net_energy_export_printed": 0.0,
+    "sub_meter_consumption": -930.3,
+    "recorded_demand_kva": 253.0,
+    "power_factor": 0.95,
+    "kvah_values": [
+      1593.37,
+      1557.38,
+      71982.0
+    ]
+  },
+  "extraction_notes": {
+    "page_used": 1,
+    "document_is_mescom_bill": true,
+    "unclear_fields": []
+  }
+}

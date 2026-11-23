@@ -1,0 +1,113 @@
+{
+  "_comment": "Gemini responseSchema (OpenAPI subset) for one MESCOM HT bill. Gemini only EXTRACTS what is printed. All derived numbers (units, consumption) are computed and checked in Python. Use null when a field is not visible; never guess.",
+  "type": "object",
+  "required": ["consumer", "billing", "meters", "extraction_notes"],
+  "properties": {
+    "consumer": {
+      "type": "object",
+      "required": ["name", "rr_number", "account_id"],
+      "properties": {
+        "name": { "type": "string", "description": "Consumer name/address block under 'To', e.g. THE PRESIDENT, ST JOSEPHS ENG COLLEGE" },
+        "rr_number": { "type": "string", "description": "RR / installation number, e.g. KULHT15" },
+        "account_id": { "type": "string", "description": "Account ID, e.g. 8758488111" },
+        "tariff": { "type": "string", "nullable": true, "description": "e.g. HT2C2" },
+        "voltage_class": { "type": "string", "nullable": true, "description": "e.g. 11kv" },
+        "contract_demand_kva": { "type": "number", "nullable": true },
+        "meter_constant": { "type": "number", "nullable": true, "description": "Multiplying factor for grid import/export meter (printed as 'Meter Constant', e.g. 2000)" },
+        "solar_constant": { "type": "number", "nullable": true, "description": "Multiplying factor for solar generation meter (printed as 'Solar-Constant', e.g. 100)" }
+      }
+    },
+    "billing": {
+      "type": "object",
+      "required": ["bill_month_label", "bill_date", "previous_reading_date", "present_reading_date"],
+      "properties": {
+        "bill_month_label": { "type": "string", "description": "As printed under 'Bill for the month of', e.g. Feb-25" },
+        "bill_date": { "type": "string", "description": "YYYY-MM-DD. Convert from DD.MM.YYYY" },
+        "due_date": { "type": "string", "nullable": true, "description": "'Payable on or before', YYYY-MM-DD" },
+        "disconnection_date": { "type": "string", "nullable": true, "description": "YYYY-MM-DD" },
+        "present_reading_date": { "type": "string", "description": "Later of the two dates above the meter table, YYYY-MM-DD" },
+        "previous_reading_date": { "type": "string", "description": "Earlier of the two dates above the meter table, YYYY-MM-DD" },
+        "book_no": { "type": "string", "nullable": true },
+        "page_no": { "type": "string", "nullable": true }
+      }
+    },
+    "meters": {
+      "type": "object",
+      "required": ["grid_import", "solar_export", "solar_generation"],
+      "properties": {
+        "grid_import": {
+          "type": "object",
+          "description": "'IMPORT ENERGY' block. Use the 'Total Consumption' row (B-1), not the time-of-day rows (all 0).",
+          "properties": {
+            "present_reading": { "type": "number" },
+            "previous_reading": { "type": "number" },
+            "units_printed": { "type": "number", "description": "Units column as printed, already multiplied, e.g. 68380.00" }
+          },
+          "required": ["present_reading", "previous_reading", "units_printed"]
+        },
+        "solar_export": {
+          "type": "object",
+          "description": "'SOLAR EXPORT ENERGY' block. Use the 'Units' row at the bottom of the block.",
+          "properties": {
+            "present_reading": { "type": "number" },
+            "previous_reading": { "type": "number" },
+            "units_printed": { "type": "number", "description": "e.g. 1568.00" }
+          },
+          "required": ["present_reading", "previous_reading", "units_printed"]
+        },
+        "solar_generation": {
+          "type": "object",
+          "description": "'Solar Generation Meter' block at top right.",
+          "properties": {
+            "present_reading": { "type": "number", "description": "e.g. 14107.17" },
+            "previous_reading": { "type": "number", "description": "e.g. 13787.83" },
+            "units_printed": { "type": "number", "description": "Underlined figure, e.g. 31934.00" }
+          },
+          "required": ["present_reading", "previous_reading", "units_printed"]
+        },
+        "net_energy_import_printed": { "type": "number", "nullable": true, "description": "'Net Energy Import' column total, e.g. 66812.00" },
+        "net_energy_export_printed": { "type": "number", "nullable": true, "description": "'Net Energy Export' column total" },
+        "sub_meter_consumption": { "type": "number", "nullable": true, "description": "'Sub Meter Consumption' line, keep the sign, e.g. -930.30" },
+        "recorded_demand_kva": { "type": "number", "nullable": true, "description": "Recorded Demand in (kVA), e.g. 253" },
+        "power_factor": { "type": "number", "nullable": true, "description": "PF column, e.g. 0.95" },
+        "kvah_values": {
+          "type": "array",
+          "nullable": true,
+          "description": "UNCONFIRMED meaning. Raw numbers in the Kvah column (e.g. 1593.37, 1557.38, 71982.00). Stored as-is until staff confirm what they represent.",
+          "items": { "type": "number" }
+        }
+      }
+    },
+    "charges": {
+      "type": "object",
+      "nullable": true,
+      "description": "Optional. Needed only for cost reporting.",
+      "properties": {
+        "demand_charges": { "type": "number", "nullable": true },
+        "billed_energy_units": { "type": "number", "nullable": true, "description": "1st slab units, e.g. 65882" },
+        "energy_rate_per_unit": { "type": "number", "nullable": true },
+        "total_energy_charges": { "type": "number", "nullable": true },
+        "fac": { "type": "number", "nullable": true },
+        "tcs": { "type": "number", "nullable": true },
+        "total_power_supply_charges": { "type": "number", "nullable": true },
+        "electricity_tax": { "type": "number", "nullable": true },
+        "total_amount": { "type": "number", "nullable": true },
+        "net_payable": { "type": "number", "nullable": true }
+      }
+    },
+    "extraction_notes": {
+      "type": "object",
+      "required": ["page_used", "unclear_fields"],
+      "properties": {
+        "page_used": { "type": "integer", "description": "1-based page number of the bill in the file" },
+        "document_is_mescom_bill": { "type": "boolean" },
+        "unclear_fields": {
+          "type": "array",
+          "description": "Dotted paths of any field that was blurry, overlapping or guessed, e.g. meters.solar_generation.present_reading",
+          "items": { "type": "string" }
+        },
+        "comments": { "type": "string", "nullable": true }
+      }
+    }
+  }
+}

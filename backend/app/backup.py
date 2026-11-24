@@ -1,63 +1,37 @@
-"""Backup management for SolarTrack.
-
-Creates and restores timestamped archives of the database and uploaded bill files.
-"""
+"""Consistent SQLite and upload backups. MySQL requires an external dump."""
 from datetime import datetime
 import json
-import os
 from pathlib import Path
-import shutil
+import sqlite3
+import tempfile
 import zipfile
+from fastapi import HTTPException
+from . import config, db
 
-from . import config
-
-BACKUP_DIR = config.ROOT / "backups"
+BACKUP_DIR = config.ROOT / 'backups'
 
 
 def create_backup() -> Path:
-    """Create a zip archive containing database and uploaded files."""
+    url = db.engine.url
+    if url.get_backend_name() != 'sqlite' or not url.database or url.database == ':memory:':
+        raise HTTPException(501, 'Automatic backups support file-based SQLite only; use mysqldump for MySQL.')
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_file = BACKUP_DIR / f"solartrack_backup_{ts}.zip"
-
-    manifest = {
-        "created_at": datetime.now().isoformat(),
-        "database_type": "sqlite" if config.database_url().startswith("sqlite") else "mysql",
-        "files_included": [],
-    }
-
-    with zipfile.ZipFile(backup_file, "w", zipfile.ZIP_DEFLATED) as zf:
-        # 1. Database (SQLite)
-        if config.database_url().startswith("sqlite"):
-            db_path = config.ROOT / "dev.db"
-            if db_path.exists():
-                zf.write(db_path, arcname="dev.db")
-                manifest["files_included"].append("dev.db")
-
-        # 2. Uploaded Bills
-        upload_folder = config.upload_dir()
-        if upload_folder.exists():
-            for f in upload_folder.rglob("*"):
-                if f.is_file():
-                    rel = f.relative_to(config.ROOT)
-                    zf.write(f, arcname=str(rel).replace("\\", "/"))
-                    manifest["files_included"].append(str(rel).replace("\\", "/"))
-
-        # 3. Manifest
-        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
-
-    return backup_file
+    target = BACKUP_DIR / f"solartrack_backup_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.zip"
+    with tempfile.TemporaryDirectory() as tmp:
+        snapshot = Path(tmp) / 'database.sqlite'
+        with sqlite3.connect(url.database) as source, sqlite3.connect(str(snapshot)) as dest:
+            source.backup(dest)
+        with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as z:
+            z.write(snapshot, 'database.sqlite')
+            uploads = config.upload_dir()
+            if uploads.exists():
+                for file in uploads.rglob('*'):
+                    if file.is_file() and not file.is_symlink():
+                        z.write(file, (Path('uploads') / file.relative_to(uploads)).as_posix())
+            z.writestr('manifest.json', json.dumps({'created_at': datetime.now().isoformat(), 'database_type': 'sqlite', 'database': 'database.sqlite'}))
+    return target
 
 
 def list_backups() -> list[dict]:
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    backups = []
-    for f in sorted(BACKUP_DIR.glob("*.zip"), reverse=True):
-        stat = f.stat()
-        backups.append({
-            "filename": f.name,
-            "path": str(f),
-            "size_bytes": stat.st_size,
-            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-        })
-    return backups
+    return [{'filename': f.name, 'path': str(f), 'size_bytes': f.stat().st_size, 'created_at': datetime.fromtimestamp(f.stat().st_mtime).isoformat()} for f in sorted(BACKUP_DIR.glob('*.zip'), reverse=True)]

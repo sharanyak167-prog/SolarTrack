@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 from app.extraction import extractor
 from app.extraction.fixtures import FEB_25
 from app.main import create_app
+from app.auth import get_current_user
+from app.models import User
+from fastapi import Request
 
 
 def march_extraction():
@@ -27,7 +30,12 @@ def march_extraction():
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("EXTRACTION_MODE", "mock")
     monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
-    with TestClient(create_app(f"sqlite:///{tmp_path / 'test.db'}")) as c:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-that-is-at-least-32-characters")
+    app = create_app(f"sqlite:///{tmp_path / 'test.db'}")
+    def test_user(request: Request):
+        return User(username=request.headers.get("X-User", "admin"), role="admin", is_active=True)
+    app.dependency_overrides[get_current_user] = test_user
+    with TestClient(app) as c:
         yield c
 
 
@@ -119,3 +127,16 @@ def test_negative_rate_rejected(client):
     bill = upload(client).json()
     r = client.put("/rates", json={"connection_id": bill["connection_id"], "bill_month": "2025-02-01", "rate_per_unit": "-1"})
     assert r.status_code == 422
+
+
+def test_end_to_end_report_pdf(client):
+    bill = upload(client).json()
+    assert client.patch(f"/bills/{bill['id']}", json={"solar_present": bill["solar_present"]}).status_code == 200
+    assert client.post(f"/bills/{bill['id']}/verify").status_code == 200
+    assert client.put('/rates', json={'connection_id': bill['connection_id'], 'bill_month': '2025-02-01', 'rate_per_unit': '7'}).status_code == 200
+    report = client.get('/reports/download', params={'connection_id': bill['connection_id'], 'start': '2025-02-01', 'end': '2025-03-01', 'include_ai': False})
+    assert report.status_code == 200 and report.content.startswith(b'%PDF-')
+    import io, pypdf
+    text = ''.join(p.extract_text() for p in pypdf.PdfReader(io.BytesIO(report.content)).pages)
+    assert '31,934' in text
+    assert 'Missing verified months' in text

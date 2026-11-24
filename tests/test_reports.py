@@ -87,3 +87,9 @@ def test_generate_report_pdf():
     assert "Details of Energy Generated from Solar Roof Top System" in page1_text
     assert "37,102" in page1_text or "37102" in page1_text
     assert "77,196" in page1_text or "77196" in page1_text
+
+
+def test_guardrail_handles_commas_negative_and_precision():
+    assert verify_summary_numbers('Produced 37,102.00', {'37102'})[0]
+    assert not verify_summary_numbers('Produced -37102', {'37102'})[0]
+    assert not verify_summary_numbers('Produced 37102.01', {'37102'})[0]

@@ -21,12 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
   INDEX idx_users_username (username)
 ) ENGINE=InnoDB;
 
--- Default Users Seed (Password: admin123, viewer123)
--- Replace with custom passwords in production.
-INSERT IGNORE INTO users (username, hashed_password, full_name, role, is_active)
-VALUES 
-  ('admin', '$2b$12$tiyGIcz5BDaA52dmXFS3SuOzelGzzopgZtHQFGLYkwk4OBetAZtEa', 'College Administrator', 'admin', 1),
-  ('viewer', '$2b$12$0h.1FhZ1N8N6K1q0zXhGPeW1gD8yI5F/pG7R2C5wL9Q4eM0sB1i6a', 'Staff Viewer', 'viewer', 1);
+-- No default accounts. Use backend/create_admin.py to create an administrator.
 
 -- 2. Connections Table (MESCOM HT Installation)
 CREATE TABLE IF NOT EXISTS connections (

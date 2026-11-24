@@ -34,14 +34,14 @@ def extraction_mode() -> str:
 
 def gemini_model() -> str:
     # Model names change often: check Google's current list and set GEMINI_MODEL.
-    return os.getenv("GEMINI_MODEL") or "gemini-3.1-flash-lite"
+    return os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
 
 
 def gemini_models() -> list[str]:
     """Main model first, then GEMINI_FALLBACK_MODELS (comma separated), no duplicates."""
     models = [gemini_model()]
     fallback_str = os.getenv("GEMINI_FALLBACK_MODELS")
-    fallbacks = fallback_str.split(",") if fallback_str is not None else ["gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-3.5-flash"]
+    fallbacks = fallback_str.split(",") if fallback_str is not None else ["gemini-2.5-flash-lite"]
     for m in fallbacks:
         m = m.strip()
         if m and m not in models:

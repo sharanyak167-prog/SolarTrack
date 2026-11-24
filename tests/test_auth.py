@@ -4,13 +4,20 @@ from fastapi.testclient import TestClient
 
 from app.auth import create_access_token, hash_password, verify_password
 from app.main import create_app
+from app import db
+from app.models import User
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("EXTRACTION_MODE", "mock")
     monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
-    with TestClient(create_app(f"sqlite:///{tmp_path / 'test_auth.db'}")) as c:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-that-is-at-least-32-characters")
+    app = create_app(f"sqlite:///{tmp_path / 'test_auth.db'}")
+    with db.SessionLocal() as session:
+        session.add_all([User(username="admin", hashed_password=hash_password("admin123"), role="admin", is_active=True), User(username="viewer", hashed_password=hash_password("viewer123"), role="viewer", is_active=True)])
+        session.commit()
+    with TestClient(app) as c:
         yield c
 
 
@@ -71,7 +78,7 @@ def test_user_management(client):
     headers = {"Authorization": f"Bearer {a_token}"}
 
     # Create new user
-    new_user = client.post("/users", json={"username": "operator1", "password": "op1password", "role": "admin", "full_name": "Operator One"}, headers=headers)
+    new_user = client.post("/users", json={"username": "operator1", "password": "op1password123", "role": "admin", "full_name": "Operator One"}, headers=headers)
     assert new_user.status_code == 201
     uid = new_user.json()["id"]
 
@@ -86,5 +93,10 @@ def test_user_management(client):
     assert deact.json()["is_active"] is False
 
     # Deactivated user cannot log in
-    log = client.post("/auth/login", json={"username": "operator1", "password": "op1password"})
+    log = client.post("/auth/login", json={"username": "operator1", "password": "op1password123"})
     assert log.status_code == 401
+
+
+def test_header_cannot_bypass_login(client):
+    assert client.get("/users", headers={"X-User": "admin"}).status_code == 401
+    assert client.get("/users?token=bogus").status_code == 401

@@ -14,19 +14,16 @@ from .. import config
 
 
 def _normalize_num(n: str) -> str:
-    # Remove commas, trailing .0, etc.
-    s = n.replace(",", "").strip()
     try:
-        f = float(s)
-        return f"{f:g}"
-    except ValueError:
-        return s
+        return str(Decimal(n.replace(",", "").strip()).normalize())
+    except Exception:
+        return n
 
 
 def verify_summary_numbers(text: str, allowed_numbers: set[str]) -> tuple[bool, list[str]]:
     """Extract all numbers from text and check that each exists in allowed_numbers."""
     # Find all standalone numbers (integers or decimals)
-    found = re.findall(r"\b\d+(?:\.\d+)?\b", text)
+    found = re.findall(r"(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])", text)
     unauthorized = []
     
     # Normalized allowed set
@@ -54,7 +51,7 @@ def deterministic_summary(data: dict) -> str:
     savings = data.get("savings", "0")
     months = data.get("months_included", 1)
 
-    savings_text = f"Rs {savings}" if savings else "Pending savings rate input"
+    savings_text = f"Rs {savings}" if savings is not None else "Pending savings rate input"
 
     return (
         f"During the period from {start} to {end} ({months} months), the college rooftop solar system "
@@ -76,17 +73,9 @@ def generate_executive_summary(data: dict, model: Optional[str] = None) -> dict:
         val = data.get(k)
         if val is not None:
             allowed_numbers.add(str(val))
-            # Also allow rounded integer version
-            try:
-                allowed_numbers.add(str(int(Decimal(str(val)))))
-            except Exception:
-                pass
-
-    # Add years and calendar numbers 2020..2030, days 1..31
-    for y in range(2020, 2035):
-        allowed_numbers.add(str(y))
-    for d in range(1, 32):
-        allowed_numbers.add(str(d))
+    # Only calendar numbers actually present in the supplied dates are allowed.
+    for key in ("start_str", "end_str"):
+        allowed_numbers.update(re.findall(r"\d+", str(data.get(key, ""))))
 
     if config.extraction_mode() == "mock" or not os.getenv("GEMINI_API_KEY"):
         summary_text = deterministic_summary(data)

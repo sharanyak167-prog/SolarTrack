@@ -9,7 +9,7 @@
       "properties": {
         "name": { "type": "string", "description": "Consumer name/address block under 'To', e.g. THE PRESIDENT, ST JOSEPHS ENG COLLEGE" },
         "rr_number": { "type": "string", "description": "RR / installation number, e.g. KULHT15" },
-        "account_id": { "type": "string", "description": "Account ID, e.g. 8758488111" },
+        "account_id": { "type": "string", "description": "Account ID as printed" },
         "tariff": { "type": "string", "nullable": true, "description": "e.g. HT2C2" },
         "voltage_class": { "type": "string", "nullable": true, "description": "e.g. 11kv" },
         "contract_demand_kva": { "type": "number", "nullable": true },

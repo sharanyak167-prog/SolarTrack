@@ -14,12 +14,7 @@ def init_db(url: str) -> None:
     engine = create_engine(url, **kwargs)
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
     Base.metadata.create_all(engine)
-    try:
-        from .auth import init_default_users
-        with SessionLocal() as s:
-            init_default_users(s)
-    except Exception:
-        pass
+
 
 
 def get_session():

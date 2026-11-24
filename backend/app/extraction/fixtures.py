@@ -5,7 +5,7 @@ FEB_25 = {
     "consumer": {
         "name": "THE PRESIDENT, ST JOSEPHS ENG COLLEGE VOMANJOOR MANGALORE",
         "rr_number": "KULHT15",
-        "account_id": "8758488111",
+        "account_id": "XXXXXXXXXX",
         "tariff": "HT2C2",
         "voltage_class": "11kv",
         "contract_demand_kva": 350,

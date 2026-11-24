@@ -36,8 +36,7 @@ function initAuth() {
       logout();
     }
   } else {
-    // Default to admin for seamless local developer testing if not logged in
-    currentUser = { username: "admin", role: "admin", full_name: "Administrator" };
+    currentUser = null;
     updateUserUI();
   }
 }
@@ -1005,9 +1004,7 @@ function downloadReportPdf() {
   const sMo = document.getElementById("repStart").value;
   const eMo = document.getElementById("repEnd").value;
   const includeAi = document.getElementById("repIncludeAI").checked;
-  const token = localStorage.getItem("solartrack_token") || "";
-
-  const url = `${API_BASE}/reports/download?connection_id=${currentConnectionId}&start=${sMo}-01&end=${eMo}-28&include_ai=${includeAi}&token=${encodeURIComponent(token)}`;
+  const url = `${API_BASE}/reports/download?connection_id=${currentConnectionId}&start=${sMo}-01&end=${eMo}-28&include_ai=${includeAi}`;
   window.open(url, "_blank");
 }
 
@@ -1064,51 +1061,6 @@ async function handleBackfillFile(file) {
     }
   } catch (err) {
     statusBox.textContent = `Error: ${err.message}`;
-  }
-}
-
-async function importBundledHistoricalData() {
-  const resultBox = document.getElementById("bundledImportResult");
-  resultBox.style.display = "block";
-  resultBox.className = "import-result-box";
-  resultBox.textContent = "Loading bundled 67-month verified faculty dataset...";
-
-  try {
-    // Fetch bundled CSV
-    const csvRes = await fetch("/static/../data/historical_records_2021_2026.csv");
-    let blob;
-    if (csvRes.ok) {
-      blob = await csvRes.blob();
-    } else {
-      // Direct sample import if static fetch path differs
-      resultBox.textContent = "Requesting server to backfill bundled records...";
-    }
-
-    const file = new File([blob], "faculty_records_2021_2026.csv", { type: "text/csv" });
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await fetch(`${API_BASE}/backfill/import`, {
-      method: "POST",
-      headers: getAuthHeader(),
-      body: formData,
-    });
-
-    const data = await res.json();
-    if (res.ok) {
-      resultBox.innerHTML = `
-        <strong>✓ 67 Months Successfully Backfilled:</strong> All records from March 2021 to September 2026 have been verified and loaded with approved rates!
-      `;
-      resultBox.style.background = "#dcfce7";
-      resultBox.style.color = "#15803d";
-      loadDashboard();
-      loadBills();
-      loadRates();
-    } else {
-      resultBox.textContent = "Error: " + JSON.stringify(data.detail);
-    }
-  } catch (err) {
-    resultBox.textContent = "Failed to import bundled dataset: " + err.message;
   }
 }
 

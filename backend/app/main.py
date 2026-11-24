@@ -37,16 +37,9 @@ def bill_out(s: Session, bill: Bill) -> BillOut:
 
 
 def create_app(database_url: Optional[str] = None) -> FastAPI:
+    auth.jwt_secret()  # Fail closed before serving requests.
     db.init_db(database_url or config.database_url())
     app = FastAPI(title="SolarTrack", version="0.2.0")
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     Session_ = Depends(db.get_session)
     Admin_ = Depends(require_admin)
@@ -119,6 +112,8 @@ def create_app(database_url: Optional[str] = None) -> FastAPI:
         u = s.get(User, user_id)
         if not u:
             raise HTTPException(404, "User not found")
+        if u.id == current_user.id and body.role is not None and body.role != "admin":
+            raise HTTPException(400, "You cannot remove your own admin role")
         if body.full_name is not None:
             u.full_name = body.full_name
         if body.role is not None:
@@ -212,7 +207,7 @@ def create_app(database_url: Optional[str] = None) -> FastAPI:
     def get_bill_file(bill_id: int, current_user: User = User_, s: Session = Session_):
         bill = services.get_bill_or_404(s, bill_id)
         f = s.get(BillFile, bill.file_id)
-        if not f or not Path(f.stored_path).exists():
+        if not f or not Path(f.stored_path).is_file():
             raise HTTPException(404, "Original file is missing")
         return FileResponse(f.stored_path, media_type=f.mime_type, filename=f.original_name)
 
@@ -349,11 +344,13 @@ def create_app(database_url: Optional[str] = None) -> FastAPI:
 
     @app.post("/backfill/import")
     async def backfill_import(file: UploadFile = File(...), current_user: User = Admin_, s: Session = Session_):
-        content = await file.read()
+        content = await file.read(config.MAX_UPLOAD_BYTES + 1)
+        if len(content) > config.MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "File exceeds upload size limit")
         filename = (file.filename or "").lower()
         if filename.endswith(".csv"):
             records = parse_csv_content(content.decode("utf-8", errors="replace"))
-        elif filename.endswith((".xlsx", ".xls")):
+        elif filename.endswith(".xlsx"):
             records = parse_excel_content(content)
         else:
             raise HTTPException(415, "Please upload a CSV or Excel (.xlsx) file")
@@ -367,10 +364,11 @@ def create_app(database_url: Optional[str] = None) -> FastAPI:
     @app.get("/backfill/template")
     def backfill_template():
         template_csv = (
-            "bill_month,month_label,solar_units_printed,import_units_printed,export_units_printed,"
-            "net_import_printed,rate_per_unit,meter_constant,solar_constant\n"
-            "2025-02-01,Feb-25,31934,68380,1568,66812,8.10,2000,100\n"
-            "2025-03-01,Mar-25,37102,77196,2610,74586,7.00,2000,100\n"
+            "bill_month,period_start,period_end,rr_number,solar_prev,solar_present,solar_units_printed,"
+            "import_prev,import_present,import_units_printed,export_prev,export_present,export_units_printed,"
+            "solar_constant,meter_constant,net_import_printed,rate_per_unit\n"
+            "2025-03-01,2025-03-01,2025-04-01,EXAMPLE,14107.17,14478.19,37102,"
+            "1524.2360,1562.8340,77196,75.1480,76.4530,2610,100,2000,74586,7\n"
         )
         return Response(
             content=template_csv,

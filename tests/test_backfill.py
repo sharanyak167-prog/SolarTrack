@@ -1,46 +1,30 @@
-"""Tests for historical backfill via CSV and Excel."""
+"""Historical imports must retain real readings and require review."""
+from datetime import date
 from decimal import Decimal
-from pathlib import Path
 import pytest
-from fastapi.testclient import TestClient
-
-from app.backfill import import_records, parse_csv_content
+from sqlalchemy import select
 from app import db
-from app.main import create_app
-from app.models import Bill, MonthlyRate
-
-CSV_PATH = Path(__file__).resolve().parents[1] / "data" / "historical_records_2021_2026.csv"
-
+from app.backfill import import_records, parse_csv_content
+from app.models import Bill
 
 @pytest.fixture
 def db_session(tmp_path):
-    url = f"sqlite:///{tmp_path / 'test_backfill.db'}"
-    db.init_db(url)
+    db.init_db(f"sqlite:///{tmp_path / 'test.db'}")
     with db.SessionLocal() as s:
         yield s
 
+CSV = """bill_month,period_start,period_end,rr_number,solar_prev,solar_present,solar_units_printed,import_prev,import_present,import_units_printed,export_prev,export_present,export_units_printed,solar_constant,meter_constant,net_import_printed,rate_per_unit
+2025-03-01,2025-03-01,2025-04-01,TEST,14107.17,14478.19,37102,1524.2360,1562.8340,77196,75.1480,76.4530,2610,100,2000,74586,7
+"""
 
-def test_import_records_from_csv(db_session):
-    records = parse_csv_content(CSV_PATH.read_text(encoding="utf-8"))
-    assert len(records) >= 60
+def test_backfill_requires_review(db_session):
+    result = import_records(db_session, parse_csv_content(CSV), user="tester")
+    assert result['errors'] == []
+    bill = db_session.scalar(select(Bill))
+    assert bill.status == 'needs_review' and bill.verified_by is None
+    assert bill.solar_prev == Decimal('14107.17')
+    assert import_records(db_session, parse_csv_content(CSV))['errors']
 
-    res = import_records(db_session, records, user="tester")
-    assert res["success"] is True
-    assert res["errors"] == []
-    assert res["created_or_updated_bills"] >= 60
-    assert res["rates_updated"] >= 60
-
-    # Verify first month: March 2021
-    from sqlalchemy import select
-    from datetime import date
-    mar_21 = db_session.scalar(select(Bill).where(Bill.bill_month == date(2021, 3, 1), Bill.is_current.is_(True)))
-    assert mar_21 is not None
-    assert mar_21.solar_units_printed == Decimal("13053")
-    assert mar_21.import_units_printed == Decimal("25140")
-    assert mar_21.export_units_printed == Decimal("1728")
-    assert mar_21.status == "verified"
-
-    # Verify rate for March 2021 = 8.05
-    rate = db_session.scalar(select(MonthlyRate).where(MonthlyRate.bill_month == date(2021, 3, 1)))
-    assert rate is not None
-    assert rate.rate_per_unit == Decimal("8.05")
+def test_backfill_rejects_missing_readings(db_session):
+    result = import_records(db_session, [{'bill_month': '2025-03-01', 'solar_units_printed': '37102'}])
+    assert result['errors'] and db_session.scalar(select(Bill)) is None

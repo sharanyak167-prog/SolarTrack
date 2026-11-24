@@ -11,7 +11,7 @@ import bcrypt
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,11 @@ from . import db
 from .models import User
 
 # Configuration
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "solartrack-secret-key-for-jwt-auth-2026")
+def jwt_secret() -> str:
+    key = os.getenv("JWT_SECRET_KEY", "")
+    if len(key) < 32:
+        raise RuntimeError("Set JWT_SECRET_KEY to a random value of at least 32 characters in .env")
+    return key
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 12  # 12 hours
 
@@ -51,10 +55,17 @@ class UserOut(BaseModel):
 
 
 class UserCreate(BaseModel):
-    username: str
-    password: str
-    full_name: Optional[str] = None
+    username: str = Field(min_length=1, max_length=60, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=12)
+    full_name: Optional[str] = Field(default=None, max_length=100)
     role: str = "viewer"  # admin | viewer
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 UTF-8 bytes")
+        return value
 
 
 class UserUpdate(BaseModel):
@@ -62,6 +73,13 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        if value is not None and (len(value) < 12 or len(value.encode("utf-8")) > 72):
+            raise ValueError("Password must be at least 12 characters and at most 72 UTF-8 bytes")
+        return value
 
 
 # Password utilities
@@ -81,12 +99,12 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return jwt.encode(to_encode, jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
     try:
-        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return jwt.decode(token, jwt_secret(), algorithms=[JWT_ALGORITHM])
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -95,46 +113,17 @@ def decode_token(token: str) -> dict:
         ) from e
 
 
-def init_default_users(s: Session) -> None:
-    """Seed initial admin and viewer if no users exist."""
-    admin_user = s.scalar(select(User).where(User.username == "admin"))
-    if not admin_user:
-        admin = User(
-            username="admin",
-            hashed_password=hash_password("admin123"),
-            full_name="College Administrator",
-            role="admin",
-            is_active=True,
-        )
-        s.add(admin)
-        s.commit()
-
-    viewer_user = s.scalar(select(User).where(User.username == "viewer"))
-    if not viewer_user:
-        viewer = User(
-            username="viewer",
-            hashed_password=hash_password("viewer123"),
-            full_name="Staff Viewer",
-            role="viewer",
-            is_active=True,
-        )
-        s.add(viewer)
-        s.commit()
-
-
 def get_current_user(
     request: Request,
     creds: Optional[HTTPAuthorizationCredentials] = Security(security_scheme),
     s: Session = Depends(db.get_session),
 ) -> User:
-    """Resolve current user from Bearer header, Cookie, query parameter, or test X-User."""
+    """Resolve the authenticated user from a bearer token or same-site cookie."""
     token: Optional[str] = None
     if creds and creds.credentials:
         token = creds.credentials
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
-    elif "token" in request.query_params:
-        token = request.query_params.get("token")
 
     if token:
         payload = decode_token(token)
@@ -145,22 +134,6 @@ def get_current_user(
         if not user or not user.is_active:
             raise HTTPException(status_code=401, detail="User account is deactivated or does not exist")
         return user
-
-    # Backwards compatibility / test convenience with X-User header or mock mode
-    x_user = request.headers.get("X-User") or request.headers.get("x-user")
-    if not x_user and (os.getenv("EXTRACTION_MODE") == "mock" or os.getenv("PYTEST_CURRENT_TEST")):
-        x_user = "admin"
-
-    if x_user:
-        user = s.scalar(select(User).where(User.username == x_user))
-        if user:
-            return user
-        # Auto-create user for test environment
-        role = "admin" if x_user in ("admin", "staff1", "anonymous") else "viewer"
-        ephemeral = User(username=x_user, hashed_password=hash_password("testpass"), role=role, full_name=x_user)
-        s.add(ephemeral)
-        s.commit()
-        return ephemeral
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

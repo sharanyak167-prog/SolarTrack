@@ -8,6 +8,7 @@ Generates official college reports matching the faculty's approved format:
 - Institutional header and signature block.
 """
 from datetime import date
+from xml.sax.saxutils import escape
 from decimal import Decimal
 import io
 from typing import Optional
@@ -154,7 +155,7 @@ def generate_report_pdf(
             summary_content = [
                 Paragraph("<b>Executive Summary & Performance Analysis</b>", cell_bold),
                 Spacer(1, 4),
-                Paragraph(ai_summary_text.replace("\n", "<br/>"), ai_box_style),
+                Paragraph(escape(ai_summary_text).replace("\n", "<br/>"), ai_box_style),
             ]
             summary_table = Table([[summary_content]], colWidths=[520])
             summary_table.setStyle(TableStyle([
@@ -164,6 +165,15 @@ def generate_report_pdf(
             ]))
             story.append(summary_table)
             story.append(Spacer(1, 14))
+
+    # Make incomplete coverage explicit rather than presenting partial totals as complete.
+    missing_months = summary_data.get("missing_months", [])
+    missing_rates = summary_data.get("missing_rates", [])
+    if missing_months or missing_rates:
+        warning = "Missing verified months: " + (", ".join(map(str, missing_months)) or "none")
+        warning += "; missing rates: " + (", ".join(map(str, missing_rates)) or "none")
+        story.append(Paragraph(escape(warning), cell_bold))
+        story.append(Spacer(1, 10))
 
     # Period Aggregated Summary if more than 1 month
     if len(months_data) > 1:
@@ -231,7 +241,7 @@ def generate_report_pdf(
         cum_savings = m.get("cumulative_savings")
         if cum_units is not None and cum_savings is not None:
             cum_block = [
-                Paragraph(f"Total Units of Energy Generated from Solar Roof Top System (from 19th March 2021 to {m_date.strftime('%d %B %Y')}) = <b>{_fmt(cum_units)} Units</b>", cum_style),
+                Paragraph(f"Total Units of Energy Generated from Solar Roof Top System (available verified records through {m_date.strftime('%d %B %Y')}) = <b>{_fmt(cum_units)} Units</b>", cum_style),
                 Paragraph(f"Total Savings in Rs = <b>{_fmt(cum_savings, prefix='Rs ')}</b>", cum_style),
                 Spacer(1, 10),
             ]
@@ -243,10 +253,10 @@ def generate_report_pdf(
     if cumulative_data:
         c_units = cumulative_data.get("total_units")
         c_savings = cumulative_data.get("total_savings")
-        if c_units and c_savings:
+        if c_units is not None and c_savings is not None:
             cum_summary = [
                 HRFlowable(width="100%", thickness=1, color=colors.HexColor("#CBD5E1"), spaceAfter=8),
-                Paragraph(f"Total Cumulative Units Generated (Since Inception 19 March 2021 to {end_str}) = <b>{_fmt(c_units)} Units</b>", cum_style),
+                Paragraph(f"Total Cumulative Units Generated (available verified records through {end_str}) = <b>{_fmt(c_units)} Units</b>", cum_style),
                 Paragraph(f"Total Cumulative Savings in Rs = <b>{_fmt(c_savings, prefix='Rs ')}</b>", cum_style),
                 Spacer(1, 14),
             ]

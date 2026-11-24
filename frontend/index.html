@@ -232,21 +232,6 @@
           </div>
         </div>
 
-        <div class="rates-ref-col">
-          <div class="card ref-card">
-            <h3>Approved Tariff Benchmark Reference</h3>
-            <p class="ref-sub">Historical benchmark tariffs from College Energy Office:</p>
-            <table class="ref-table">
-              <tr><td>March 2021 – May 2021:</td><td><strong>₹ 8.05 / unit</strong></td></tr>
-              <tr><td>June 2021 – March 2022:</td><td><strong>₹ 8.15 / unit</strong></td></tr>
-              <tr><td>April 2022 – April 2023:</td><td><strong>₹ 8.20 / unit</strong></td></tr>
-              <tr><td>May 2023 – April 2024:</td><td><strong>₹ 8.50 / unit</strong></td></tr>
-              <tr><td>May 2024 – March 2025:</td><td><strong>₹ 8.10 / unit</strong> (Mar-25 Faculty Note: <strong>₹ 7.00</strong>)</td></tr>
-              <tr><td>April 2025 – June 2026:</td><td><strong>₹ 7.20 / unit</strong></td></tr>
-              <tr><td>July 2026 – September 2026:</td><td><strong>₹ 7.00 / unit</strong></td></tr>
-            </table>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -259,7 +244,7 @@
         </div>
       </div>
       <p class="section-desc">
-        Generates official energy reports matching the faculty's approved multi-month format. Includes lines (a), (b), (c), (d),
+        Generates official energy reports using a default format pending faculty approval. Includes lines (a), (b), (c), (d),
         total consumption, monthly savings, cumulative metrics from inception (18 March 2021), and an AI executive summary.
       </p>
 
@@ -326,20 +311,10 @@
 
       <div class="backfill-grid">
         <div class="card">
-          <h3>One-Click Import Faculty Dataset (2021 – 2026)</h3>
-          <p>
-            The project includes the complete 67-month verified historical dataset extracted from the college faculty's approved report
-            (March 2021 to September 2026). Click below to backfill all 67 months instantly.
-          </p>
-          <button class="btn btn-success btn-lg" onclick="importBundledHistoricalData()">⚡ Import All 67 Months Now</button>
-          <div id="bundledImportResult" class="import-result-box" style="display: none;"></div>
-        </div>
-
-        <div class="card">
           <h3>Custom File Upload (CSV or Excel)</h3>
           <div class="file-drop-zone" id="backfillDropZone">
             <p>Drag and drop a <strong>.csv</strong> or <strong>.xlsx</strong> file here, or click to browse</p>
-            <input type="file" id="backfillFileInput" accept=".csv, .xlsx, .xls" style="display: none;" onchange="handleBackfillFile(this.files[0])">
+            <input type="file" id="backfillFileInput" accept=".csv, .xlsx" style="display: none;" onchange="handleBackfillFile(this.files[0])">
             <button class="btn btn-outline" onclick="document.getElementById('backfillFileInput').click()">Select File</button>
           </div>
           <div id="customBackfillStatus" class="import-result-box" style="display: none;"></div>
@@ -679,13 +654,6 @@
         <div class="form-field">
           <label>Password:</label>
           <input type="password" id="loginPassword" required>
-        </div>
-        <div class="quick-credentials">
-          <small class="text-muted">Default system accounts:</small>
-          <div class="quick-creds-btns">
-            <button type="button" class="btn btn-xs btn-outline" onclick="fillCreds('admin', 'admin123')">Admin (admin/admin123)</button>
-            <button type="button" class="btn btn-xs btn-outline" onclick="fillCreds('viewer', 'viewer123')">Viewer (viewer/viewer123)</button>
-          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="closeAuthModal()">Cancel</button>

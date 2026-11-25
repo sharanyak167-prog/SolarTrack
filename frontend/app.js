@@ -15,8 +15,10 @@ let charts = {};
 
 document.addEventListener("DOMContentLoaded", async () => {
   initAuth();
-  await loadConnections();
-  await loadDashboard();
+  if (currentUser) {
+    await loadConnections();
+    await loadDashboard();
+  }
   setupDragAndDrop();
 });
 
@@ -36,9 +38,10 @@ function initAuth() {
       logout();
     }
   } else {
-    // Default to admin for seamless local developer testing if not logged in
-    currentUser = { username: "admin", role: "admin", full_name: "Administrator" };
+    currentUser = null;
     updateUserUI();
+    const modal = document.getElementById("authModal");
+    if (modal) modal.style.display = "flex";
   }
 }
 
@@ -105,6 +108,7 @@ async function submitLogin(e) {
 
     closeAuthModal();
     updateUserUI();
+    loadConnections();
     loadDashboard();
     loadBills();
   } catch (err) {
@@ -131,6 +135,8 @@ function switchTab(tabId) {
 
   const clickedTab = Array.from(document.querySelectorAll(".nav-tab")).find(b => b.getAttribute("onclick")?.includes(tabId));
   if (clickedTab) clickedTab.classList.add("active");
+
+  updateUserUI();
 
   if (tabId === "dashboard") loadDashboard();
   if (tabId === "bills") loadBills();
@@ -357,6 +363,7 @@ async function loadBills() {
 
 function renderBillsTable(bills) {
   const tbody = document.getElementById("billsTableBody");
+  const isAdmin = currentUser && currentUser.role === "admin";
   if (!bills || bills.length === 0) {
     tbody.innerHTML = `<tr><td colspan="12" class="text-center text-muted" style="padding: 30px;">No bills found for the selected filters.</td></tr>`;
     return;
@@ -393,8 +400,10 @@ function renderBillsTable(bills) {
         <td>${flagBadge}</td>
         <td>
           <button class="btn btn-xs btn-primary" onclick="openReviewModal(${b.id})">🔍 Review</button>
-          <a href="/bills/${b.id}/file" target="_blank" class="btn btn-xs btn-outline">Original</a>
-          <button class="btn btn-xs btn-danger admin-only" onclick="deleteBill(${b.id})">🗑️</button>
+          ${b.extraction_model === 'historical_backfill' || !b.file_id 
+            ? `<span class="badge" style="opacity: 0.6; font-size: 11px;">CSV Import</span>` 
+            : `<a href="/bills/${b.id}/file" target="_blank" class="btn btn-xs btn-outline">Original</a>`}
+          ${isAdmin ? `<button class="btn btn-xs btn-danger" onclick="deleteBill(${b.id})">🗑️</button>` : ''}
         </td>
       </tr>
     `;
@@ -422,9 +431,37 @@ async function openReviewModal(billId) {
     statusBadge.textContent = selectedBill.status.replace("_", " ");
     statusBadge.className = `badge badge-${selectedBill.status}`;
 
-    // Left: Document preview
-    document.getElementById("docViewerIframe").src = `/bills/${selectedBill.id}/file`;
-    document.getElementById("revOriginalDownload").href = `/bills/${selectedBill.id}/file`;
+    // Pass token as query param so the iframe and download link work without Bearer header
+    const _tok = localStorage.getItem("solartrack_token") || "";
+    const _tokParam = _tok ? `?token=${encodeURIComponent(_tok)}` : "";
+
+    // Document preview vs Historical Backfill placeholder
+    const isBackfill = selectedBill.extraction_model === "historical_backfill" || !selectedBill.file_id;
+    const iframe = document.getElementById("docViewerIframe");
+    const placeholder = document.getElementById("docViewerPlaceholder");
+    const openTabBtn = document.getElementById("revOriginalDownload");
+
+    if (isBackfill) {
+      if (iframe) { iframe.style.display = "none"; iframe.src = "about:blank"; }
+      if (placeholder) placeholder.style.display = "block";
+      if (openTabBtn) openTabBtn.style.display = "none";
+    } else {
+      if (placeholder) placeholder.style.display = "none";
+      if (iframe) {
+        iframe.style.display = "block";
+        iframe.src = `/bills/${selectedBill.id}/file${_tokParam}`;
+      }
+      if (openTabBtn) {
+        openTabBtn.style.display = "";
+        openTabBtn.href = `/bills/${selectedBill.id}/file${_tokParam}`;
+      }
+    }
+
+    // Role-based editing restrictions: viewers cannot edit inputs or verify
+    const isAdmin = currentUser && currentUser.role === "admin";
+    document.querySelectorAll("#reviewForm input").forEach(inp => {
+      inp.readOnly = !isAdmin;
+    });
 
     // Right: Populate Form
     document.getElementById("editBillId").value = selectedBill.id;
@@ -459,7 +496,10 @@ async function openReviewModal(billId) {
 
 function closeReviewModal() {
   document.getElementById("reviewModal").style.display = "none";
-  document.getElementById("docViewerIframe").src = "about:blank";
+  const iframe = document.getElementById("docViewerIframe");
+  if (iframe) iframe.src = "about:blank";
+  const placeholder = document.getElementById("docViewerPlaceholder");
+  if (placeholder) placeholder.style.display = "none";
   selectedBill = null;
 }
 
@@ -756,8 +796,14 @@ async function loadRates() {
 
 function renderRatesTable(rates) {
   const tbody = document.getElementById("ratesTableBody");
+  const isAdmin = currentUser && currentUser.role === "admin";
+
+  // Hide or show Action column header based on admin role
+  const actionTh = document.querySelectorAll("#ratesTable th.admin-only");
+  actionTh.forEach(th => th.style.display = isAdmin ? "" : "none");
+
   if (!rates || rates.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted" style="padding: 24px;">No monthly rates entered yet. Click "Set Rate" to enter one.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${isAdmin ? 5 : 4}" class="text-center text-muted" style="padding: 24px;">No monthly rates entered yet.</td></tr>`;
     return;
   }
 
@@ -770,14 +816,16 @@ function renderRatesTable(rates) {
       <td><strong>₹ ${r.rate_per_unit}</strong></td>
       <td>${r.entered_by || 'staff'}</td>
       <td><span class="badge badge-verified">Active</span></td>
-      <td class="admin-only">
-        <button class="btn btn-xs btn-outline" onclick="editRate('${r.bill_month}', '${r.rate_per_unit}')">Edit Rate</button>
-      </td>
+      ${isAdmin ? `<td><button class="btn btn-xs btn-outline" onclick="editRate('${r.bill_month}', '${r.rate_per_unit}')">Edit Rate</button></td>` : ''}
     </tr>
   `).join("");
 }
 
 function openRateModal(monthVal = "", rateVal = "") {
+  if (!currentUser || currentUser.role !== "admin") {
+    alert("Permission Denied: Only administrators can set or edit savings rates.");
+    return;
+  }
   document.getElementById("rateMonthInput").value = monthVal || new Date().toISOString().slice(0, 7);
   document.getElementById("rateValueInput").value = rateVal || "";
   document.getElementById("rateModal").style.display = "flex";
@@ -788,11 +836,19 @@ function closeRateModal() {
 }
 
 function editRate(m, r) {
+  if (!currentUser || currentUser.role !== "admin") {
+    alert("Permission Denied: Only administrators can edit savings rates.");
+    return;
+  }
   openRateModal(m.slice(0, 7), r);
 }
 
 async function submitRate(e) {
   e.preventDefault();
+  if (!currentUser || currentUser.role !== "admin") {
+    alert("Permission Denied: Only administrators can save savings rates.");
+    return;
+  }
   const m = document.getElementById("rateMonthInput").value;
   const r = document.getElementById("rateValueInput").value;
 

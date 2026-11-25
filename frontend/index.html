@@ -203,9 +203,6 @@
     <section id="tab-rates" class="tab-pane">
       <div class="pane-header">
         <h2>Monthly Savings Rates</h2>
-        <div class="pane-actions">
-          <button class="btn btn-primary admin-only" onclick="openRateModal()">➕ Set Rate for Month</button>
-        </div>
       </div>
       <p class="section-desc">
         Under approved faculty rules, the savings rate (₹ per kWh) must be entered by college staff for EACH month.
@@ -443,6 +440,16 @@
           </div>
           <div class="doc-viewer-container" id="docViewerContainer">
             <iframe id="docViewerIframe" src="about:blank"></iframe>
+            <div id="docViewerPlaceholder" style="display: none; padding: 60px 24px; text-align: center; color: var(--text-muted);">
+              <div style="font-size: 56px; margin-bottom: 16px;">📑</div>
+              <h3 style="color: var(--text-color); margin-bottom: 8px;">Historical Backfill Record</h3>
+              <p style="max-width: 400px; margin: 0 auto; line-height: 1.6; font-size: 14px;">
+                This record was imported from the faculty historical dataset (CSV). No scanned bill PDF or photo is attached.
+              </p>
+              <p style="margin-top: 14px; font-size: 13px; color: var(--text-muted);">
+                All extracted readings, constants, and calculated metrics are available for review and adjustments on the right.
+              </p>
+            </div>
           </div>
         </div>
 
